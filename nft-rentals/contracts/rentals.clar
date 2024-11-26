@@ -9,6 +9,10 @@
 (define-constant err-not-rented (err u104))
 (define-constant err-rental-expired (err u105))
 
+(define-constant err-cannot-extend (err u106))
+(define-constant err-invalid-extension (err u107))
+(define-constant max-rental-extension-blocks u1000)
+
 ;; Data Variables
 (define-data-var next-rental-id uint u0)
 
@@ -111,5 +115,39 @@
     (map-delete token-rental (get token-id rental))
     (map-delete rentals rental-id)
     (ok true)
+  )
+)
+
+;; Commit: Implement Rental Extension Feature
+(define-public (extend-rental (rental-id uint) (additional-blocks uint))
+  (let
+    (
+      (rental (unwrap! (map-get? rentals rental-id) err-token-not-found))
+      (current-renter (unwrap! (get renter rental) err-not-rented))
+    )
+    ;; Ensure only current renter can extend
+    (asserts! (is-eq tx-sender current-renter) err-cannot-extend)
+    
+    ;; Limit extension to prevent abuse
+    (asserts! (<= additional-blocks max-rental-extension-blocks) err-invalid-extension)
+    
+    ;; Calculate additional cost (could be prorated or at full rental rate)
+    (let
+      (
+        (extension-price (/ (* (get price rental) additional-blocks) (get rental-end rental)))
+      )
+      ;; Transfer additional funds to owner
+      (try! (stx-transfer? extension-price tx-sender (get owner rental)))
+      
+      ;; Update rental end time
+      (map-set rentals
+        rental-id
+        (merge rental {
+          rental-end: (+ (get rental-end rental) additional-blocks)
+        })
+      )
+      
+      (ok true)
+    )
   )
 )
