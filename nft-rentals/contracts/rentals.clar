@@ -34,6 +34,16 @@
 
 (define-map token-rental uint uint)
 
+(define-map rental-disputes
+  uint
+  {
+    rental-id: uint,
+    disputer: principal,
+    reason: (string-utf8 100),
+    status: (string-ascii 20)
+  }
+)
+
 ;; Read-only functions
 (define-read-only (get-rental (rental-id uint))
   (map-get? rentals rental-id)
@@ -149,5 +159,33 @@
       
       (ok true)
     )
+  )
+)
+
+(define-public (file-rental-dispute (rental-id uint) (reason (string-utf8 100)))
+  (let
+    (
+      (rental (unwrap! (map-get? rentals rental-id) err-token-not-found))
+    )
+    ;; Only renter or owner can file a dispute
+    (asserts! 
+      (or 
+        (is-eq tx-sender (unwrap! (get renter rental) err-not-rented))
+        (is-eq tx-sender (get owner rental))
+      )
+      err-owner-only
+    )
+    
+    (map-set rental-disputes
+      rental-id
+      {
+        rental-id: rental-id,
+        disputer: tx-sender,
+        reason: reason,
+        status: "PENDING"
+      }
+    )
+    
+    (ok true)
   )
 )
