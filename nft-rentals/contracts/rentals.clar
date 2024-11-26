@@ -47,6 +47,18 @@
   }
 )
 
+(define-map rental-ratings
+  uint
+  {
+    rental-id: uint,
+    renter-rating: (optional uint),
+    owner-rating: (optional uint),
+    renter-review: (optional (string-utf8 200)),
+    owner-review: (optional (string-utf8 200))
+  }
+)
+
+
 ;; Read-only functions
 (define-read-only (get-rental (rental-id uint))
   (map-get? rentals rental-id)
@@ -206,5 +218,50 @@
     (try! (stx-transfer? marketplace-fee tx-sender contract-owner))
     
     (ok marketplace-fee)
+  )
+)
+
+(define-public (rate-rental (rental-id uint) (is-renter bool) (rating uint) (review (optional (string-utf8 200))))
+  (let
+    (
+      (rental (unwrap! (map-get? rentals rental-id) err-token-not-found))
+      (current-ratings (default-to 
+        {
+          rental-id: rental-id,
+          renter-rating: none,
+          owner-rating: none,
+          renter-review: none,
+          owner-review: none
+        }
+        (map-get? rental-ratings rental-id)
+      ))
+    )
+    ;; Ensure rating is between 1-5
+    (asserts! (and (>= rating u1) (<= rating u5)) err-invalid-extension)
+    
+    ;; Ensure only participants can rate
+    (asserts! 
+      (or 
+        (and is-renter (is-eq tx-sender (unwrap! (get renter rental) err-not-rented)))
+        (and (not is-renter) (is-eq tx-sender (get owner rental)))
+      )
+      err-owner-only
+    )
+    
+    (map-set rental-ratings
+      rental-id
+      (if is-renter
+        (merge current-ratings {
+          renter-rating: (some rating),
+          renter-review: review
+        })
+        (merge current-ratings {
+          owner-rating: (some rating),
+          owner-review: review
+        })
+      )
+    )
+    
+    (ok true)
   )
 )
