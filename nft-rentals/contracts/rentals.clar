@@ -13,6 +13,9 @@
 (define-constant err-invalid-extension (err u107))
 (define-constant max-rental-extension-blocks u1000)
 
+(define-constant marketplace-fee-bps u250) ;; 2.5% fee
+(define-constant err-insufficient-funds (err u108))
+
 ;; Data Variables
 (define-data-var next-rental-id uint u0)
 
@@ -187,5 +190,21 @@
     )
     
     (ok true)
+  )
+)
+
+(define-public (collect-marketplace-fee (rental-id uint))
+  (let
+    (
+      (rental (unwrap! (map-get? rentals rental-id) err-token-not-found))
+      (rental-price (get price rental))
+      (marketplace-fee (/ (* rental-price marketplace-fee-bps) u10000))
+    )
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    
+    ;; Transfer marketplace fee to contract owner
+    (try! (stx-transfer? marketplace-fee tx-sender contract-owner))
+    
+    (ok marketplace-fee)
   )
 )
